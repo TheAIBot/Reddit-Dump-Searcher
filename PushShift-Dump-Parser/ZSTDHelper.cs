@@ -82,13 +82,12 @@ namespace PushShift_Dump_Parser
                     CompressionStream = new CompressionStream(FileStream);
                 }
 
-                if (WrittenBytes > 0)
-                {
-                    CompressionStream.WriteByte((byte)'\n');
-                    WrittenBytes++;
-                }
                 CompressionStream.Write(commentJSon.Span);
                 WrittenBytes += commentJSon.Length;
+
+                //Comments are separated by a new line
+                CompressionStream.WriteByte((byte)'\n');
+                WrittenBytes++;
             }
 
             private void CloseStreams()
