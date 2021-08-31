@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31612.314
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PushShift-Dump-Parser", "PushShift-Dump-Parser\PushShift-Dump-Parser.csproj", "{92458FB4-AD18-4780-89EE-C469F84081BA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{92458FB4-AD18-4780-89EE-C469F84081BA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{92458FB4-AD18-4780-89EE-C469F84081BA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{92458FB4-AD18-4780-89EE-C469F84081BA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{92458FB4-AD18-4780-89EE-C469F84081BA}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {257F3B36-C513-4106-A82C-D83F69023926}
+	EndGlobalSection
+EndGlobal
