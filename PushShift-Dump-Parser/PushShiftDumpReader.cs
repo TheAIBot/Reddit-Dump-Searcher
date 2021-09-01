@@ -20,26 +20,26 @@ namespace PushShift_Dump_Parser
             this.FilePath = filePath;
         }
 
-        public void ReadUncompressedDumpFile(string[] searchTerms)
+        public async ValueTask ReadUncompressedDumpFile(string[] searchTerms)
         {
             using var fileStream = File.OpenRead(FilePath);
-            ReadDumpFile(fileStream, searchTerms, IncrementStats);
+            await ReadDumpFile(fileStream, searchTerms, IncrementStats);
         }
 
-        public void ReadCompressedDumpFile(string[] searchTerms)
+        public async ValueTask ReadCompressedDumpFile(string[] searchTerms)
         {
-            ReadCompressedDumpFile(searchTerms, IncrementStats);
+            await ReadCompressedDumpFile(searchTerms, IncrementStats);
         }
 
-        public void ReadCompressedDumpFile(string[] searchTerms, Action<Memory<byte>, bool> commentHandler)
+        public async ValueTask ReadCompressedDumpFile(string[] searchTerms, Func<Memory<byte>, bool, ValueTask> commentHandler)
         {
             using var fileStream = File.OpenRead(FilePath);
             using var wafa = new DecompressionStream(fileStream);
 
-            ReadDumpFile(wafa, searchTerms, commentHandler);
+            await ReadDumpFile(wafa, searchTerms, commentHandler);
         }
 
-        private void ReadDumpFile(Stream binaryFile, string[] searchTerms, Action<Memory<byte>, bool> commentHandler)
+        private async ValueTask ReadDumpFile(Stream binaryFile, string[] searchTerms, Func<Memory<byte>, bool, ValueTask> commentHandler)
         {
             byte[][] searchTermsAsBytes = searchTerms.Select(Encoding.UTF8.GetBytes).ToArray();
 
@@ -65,13 +65,13 @@ namespace PushShift_Dump_Parser
                     }
                 }
 
-                commentHandler(commentJSon, foundAllTerms);
+                await commentHandler(commentJSon, foundAllTerms);
             }
 
             IsDoneSearching = true;
         }
 
-        private void IncrementStats(Memory<byte> commentJSon, bool foundAllTerms)
+        private async ValueTask IncrementStats(Memory<byte> commentJSon, bool foundAllTerms)
         {
             if (foundAllTerms)
             {

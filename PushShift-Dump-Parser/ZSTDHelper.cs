@@ -2,7 +2,9 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using ZstdNet;
@@ -54,7 +56,7 @@ namespace PushShift_Dump_Parser
         public static async Task SplitFilesIntoSmallerCompressedFiles(string srcDir, string dstDir)
         {
             Directory.CreateDirectory(dstDir);
-            ActionBlock<string> actionExecutor = new ActionBlock<string>(srcFileName =>
+            ActionBlock<string> actionExecutor = new ActionBlock<string>(async srcFileName =>
             {
                 string baseDstFileName = Path.Combine(dstDir, Path.GetFileNameWithoutExtension(srcFileName));
                 string fileExtension = Path.GetExtension(srcFileName);
@@ -63,7 +65,7 @@ namespace PushShift_Dump_Parser
                 var commentSearcher = new PushShiftDumpReader(srcFileName);
                 using var commentSplitter = new CommentsIntoChunks(baseDstFileName, fileExtension, maxFileSize);
 
-                commentSearcher.ReadCompressedDumpFile(Array.Empty<string>(), commentSplitter.HandleComment);
+                await commentSearcher.ReadCompressedDumpFile(Array.Empty<string>(), commentSplitter.HandleComment);
             },
             new ExecutionDataflowBlockOptions()
             {
@@ -94,8 +96,10 @@ namespace PushShift_Dump_Parser
         private readonly string FileExtension;
         private readonly long MaxBytesPerFile;
         private readonly Task CompressionTask;
-        private readonly BlockingCollection<byte[]> PrivatePool;
-        private readonly BlockingCollection<(CommentBuffer buffer, string fileName)> CompressionCom;
+        private readonly ChannelReader<byte[]> BufferPool;
+        private readonly ChannelWriter<WriterCommand> CompressorCmds;
+        private const int BufferCount = 5;
+        private const int BufferSize = 1024 * 1024 * 100;
         private int FileCount = 0;
         private long WrittenBytes = 0;
         private CommentBuffer CompressionBuffer;
@@ -105,18 +109,33 @@ namespace PushShift_Dump_Parser
             this.BaseFilePath = baseFilePath;
             this.FileExtension = fileExtension;
             this.MaxBytesPerFile = maxBytesPerFile;
-            this.PrivatePool = new BlockingCollection<byte[]>();
-            for (int i = 0; i < 5; i++)
+
+
+            Channel<byte[]> bufferPoolChannel = Channel.CreateBounded<byte[]>(BufferCount);
+            Channel<WriterCommand> compressorCommandsChannel = Channel.CreateBounded<WriterCommand>(BufferCount);
+            this.BufferPool = bufferPoolChannel.Reader;
+            this.CompressorCmds = compressorCommandsChannel.Writer;
+
+            var poolWriter = bufferPoolChannel.Writer;
+            var cmdReader = compressorCommandsChannel.Reader;
+            for (int i = 0; i < BufferCount; i++)
             {
-                PrivatePool.Add(new byte[1024 * 1024 * 100]);
+                if (!poolWriter.TryWrite(new byte[BufferSize]))
+                {
+                    throw new Exception("Failed to put a buffer in the array pool channel when filling it initially with arrays.");
+                }
             }
 
-            this.CompressionCom = new BlockingCollection<(CommentBuffer buffer, string fileName)>(new ConcurrentQueue<(CommentBuffer buffer, string fileName)>());
-            this.CompressionTask = Task.Run(() => CompressBuffers(CompressionCom, PrivatePool));
-            this.CompressionBuffer = new CommentBuffer(PrivatePool);
+            this.CompressionTask = Task.Run(async () => await CompressBuffers(cmdReader, poolWriter));
+
+            if (!BufferPool.TryRead(out byte[]? buffer))
+            {
+                throw new Exception("Failed to fetch buffer while one should be available.");
+            }
+            this.CompressionBuffer = new CommentBuffer(buffer);
         }
 
-        public void HandleComment(Memory<byte> commentJSon, bool foundAllTerms)
+        public async ValueTask HandleComment(Memory<byte> commentJSon, bool foundAllTerms)
         {
             bool chunkIsDone = false;
             if (WrittenBytes + commentJSon.Length > MaxBytesPerFile)
@@ -128,9 +147,9 @@ namespace PushShift_Dump_Parser
 
             if (!CompressionBuffer.HasSpaceForComment(commentJSon) || chunkIsDone)
             {
-                string fileName = $"{BaseFilePath}-{FileCount}{FileExtension}";
-                CompressionCom.Add((CompressionBuffer, fileName));
-                CompressionBuffer = new CommentBuffer(PrivatePool);
+                string? fileName = $"{BaseFilePath}-{FileCount}{FileExtension}";
+                await CompressorCmds.WriteAsync(new WriterCommand(fileName, CompressionBuffer, chunkIsDone));
+                CompressionBuffer = new CommentBuffer(await BufferPool.ReadAsync());
             }
 
             CompressionBuffer.AddComment(commentJSon);
@@ -139,24 +158,31 @@ namespace PushShift_Dump_Parser
             WrittenBytes += commentJSon.Length + 1;
         }
 
-        private static void CompressBuffers(BlockingCollection<(CommentBuffer buffer, string fileName)> bufferFetcher, BlockingCollection<byte[]> arrayPool)
+        private static async ValueTask CompressBuffers(ChannelReader<WriterCommand> cmdReader, ChannelWriter<byte[]> arrayPool)
         {
-            var data = bufferFetcher.Take();
+            var data = await cmdReader.ReadAsync();
             while (true)
             {
-                using var fileStream = File.OpenWrite(data.fileName);
+                using var fileStream = File.OpenWrite(data.FileName);
                 using var compressionStream = new CompressionStream(fileStream);
 
                 while (true)
                 {
-                    compressionStream.Write(data.buffer.Buffer);
-                    data.buffer.Return(arrayPool);
+                    compressionStream.Write(data.Buffer.Buffer);
+                    await data.Buffer.Return(arrayPool);
 
-                    if (!bufferFetcher.TryTake(out data, -1))
+                    //Only taken when there is no more work to be done
+                    if (!await cmdReader.WaitToReadAsync())
                     {
                         return;
                     }
-                    else if (fileStream.Name != data.fileName)
+
+                    if (!cmdReader.TryRead(out data))
+                    {
+                        throw new Exception("Expected data to be available but none was in the channel.");
+                    }
+
+                    if (data.CreateNewFile)
                     {
                         break;
                     }
@@ -166,9 +192,22 @@ namespace PushShift_Dump_Parser
 
         public void Dispose()
         {
-            CompressionCom.CompleteAdding();
+            CompressorCmds.Complete();
             CompressionTask.Wait();
-            CompressionCom.Dispose();
+        }
+    }
+
+    internal readonly struct WriterCommand
+    {
+        public readonly string FileName;
+        public readonly CommentBuffer Buffer;
+        public readonly bool CreateNewFile;
+
+        public WriterCommand(string fileName, CommentBuffer buffer, bool createNewFile)
+        {
+            this.FileName = fileName;
+            this.Buffer = buffer;
+            this.CreateNewFile = createNewFile;
         }
     }
 
@@ -179,9 +218,9 @@ namespace PushShift_Dump_Parser
 
         public ReadOnlySpan<byte> Buffer => Arr.AsSpan(0, BytesInBuffer);
 
-        public CommentBuffer(BlockingCollection<byte[]> arrayPool)
+        public CommentBuffer(byte[] array)
         {
-            this.Arr = arrayPool.Take();
+            this.Arr = array;
             this.BytesInBuffer = 0;
         }
 
@@ -199,11 +238,11 @@ namespace PushShift_Dump_Parser
             BytesInBuffer++;
         }
 
-        public void Return(BlockingCollection<byte[]> arrayPool)
+        public async ValueTask Return(ChannelWriter<byte[]> arrayPool)
         {
             if (Arr != null)
             {
-                arrayPool.Add(Arr);
+                await arrayPool.WriteAsync(Arr);
             }
         }
     }
