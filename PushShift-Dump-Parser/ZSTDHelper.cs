@@ -135,7 +135,7 @@ namespace PushShift_Dump_Parser
             this.CompressionBuffer = new CommentBuffer(buffer);
         }
 
-        public async ValueTask HandleComment(Memory<byte> commentJSon, bool foundAllTerms)
+        public async ValueTask HandleComment(ReadOnlyMemory<byte> commentJSon, bool foundAllTerms)
         {
             bool chunkIsDone = false;
             if (WrittenBytes + commentJSon.Length > MaxBytesPerFile)

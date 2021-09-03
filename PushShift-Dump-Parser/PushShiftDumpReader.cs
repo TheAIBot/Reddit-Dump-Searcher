@@ -31,7 +31,7 @@ namespace PushShift_Dump_Parser
             await ReadCompressedDumpFile(searchTerms, IncrementStats);
         }
 
-        public async ValueTask ReadCompressedDumpFile(string[] searchTerms, Func<Memory<byte>, bool, ValueTask> commentHandler)
+        public async ValueTask ReadCompressedDumpFile(string[] searchTerms, Func<ReadOnlyMemory<byte>, bool, ValueTask> commentHandler)
         {
             using var fileStream = File.OpenRead(FilePath);
             using var wafa = new DecompressionStream(fileStream);
@@ -39,17 +39,17 @@ namespace PushShift_Dump_Parser
             await ReadDumpFile(wafa, searchTerms, commentHandler);
         }
 
-        private async ValueTask ReadDumpFile(Stream binaryFile, string[] searchTerms, Func<Memory<byte>, bool, ValueTask> commentHandler)
+        private async ValueTask ReadDumpFile(Stream binaryFile, string[] searchTerms, Func<ReadOnlyMemory<byte>, bool, ValueTask> commentHandler)
         {
             byte[][] searchTermsAsBytes = searchTerms.Select(Encoding.UTF8.GetBytes).ToArray();
 
             byte[] buffer = new byte[DefaultBufferSize];
             binaryFile.Read(buffer);
-            Memory<byte> bufferRemaining = buffer;
+            ReadOnlyMemory<byte> bufferRemaining = buffer;
 
             while (true)
             {
-                Memory<byte> commentJSon;
+                ReadOnlyMemory<byte> commentJSon;
                 if (!TryGetNextLine(binaryFile, ref buffer, ref bufferRemaining, out commentJSon))
                 {
                     break;
@@ -71,7 +71,7 @@ namespace PushShift_Dump_Parser
             IsDoneSearching = true;
         }
 
-        private async ValueTask IncrementStats(Memory<byte> commentJSon, bool foundAllTerms)
+        private async ValueTask IncrementStats(ReadOnlyMemory<byte> commentJSon, bool foundAllTerms)
         {
             if (foundAllTerms)
             {
@@ -80,7 +80,7 @@ namespace PushShift_Dump_Parser
             LinesSearched++;
         }
 
-        private bool TryGetNextLine(Stream stream, ref byte[] buffer, ref Memory<byte> bufferRemaining, out Memory<byte> commentJSon)
+        private bool TryGetNextLine(Stream stream, ref byte[] buffer, ref ReadOnlyMemory<byte> bufferRemaining, out ReadOnlyMemory<byte> commentJSon)
         {
             //See if a whole comment is in the buffer
             if (TryExtractComment(ref bufferRemaining, out commentJSon))
@@ -107,11 +107,11 @@ namespace PushShift_Dump_Parser
                     {
                         throw new Exception("Partial comment remaining in buffer when reaching EOF.");
                     }
-                    commentJSon = new Memory<byte>();
+                    commentJSon = new ReadOnlyMemory<byte>();
                     return false;
                 }
 
-                bufferRemaining = new Memory<byte>(buffer, 0, bufferRemaining.Length + bytesRead);
+                bufferRemaining = new ReadOnlyMemory<byte>(buffer, 0, bufferRemaining.Length + bytesRead);
                 if (TryExtractComment(ref bufferRemaining, out commentJSon))
                 {
                     return true;
@@ -128,11 +128,11 @@ namespace PushShift_Dump_Parser
 
                 //Resize array and remember to update bufferRemaining as well
                 Array.Resize(ref buffer, buffer.Length * 2);
-                bufferRemaining = new Memory<byte>(buffer, 0, bufferRemaining.Length);
+                bufferRemaining = new ReadOnlyMemory<byte>(buffer, 0, bufferRemaining.Length);
             }
         }
 
-        private bool TryExtractComment(ref Memory<byte> bufferRemaining, out Memory<byte> commentJSon)
+        private bool TryExtractComment(ref ReadOnlyMemory<byte> bufferRemaining, out ReadOnlyMemory<byte> commentJSon)
         {
             int newLineIndex = bufferRemaining.Span.IndexOf((byte)'\n');
             if (newLineIndex != -1)
@@ -142,7 +142,7 @@ namespace PushShift_Dump_Parser
                 return true;
             }
 
-            commentJSon = new Memory<byte>();
+            commentJSon = new ReadOnlyMemory<byte>();
             return false;
         }
     }
