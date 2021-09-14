@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
@@ -22,8 +23,13 @@ namespace PushShift_Dump_Parser
 
         public async ValueTask ReadUncompressedDumpFile(string[] searchTerms)
         {
+            await ReadUncompressedDumpFile(searchTerms, IncrementStats);
+        }
+
+        public async ValueTask ReadUncompressedDumpFile(string[] searchTerms, Func<ReadOnlyMemory<byte>, bool, ValueTask> commentHandler)
+        {
             using var fileStream = File.OpenRead(FilePath);
-            await ReadDumpFile(fileStream, searchTerms, IncrementStats);
+            await ReadDumpFile(fileStream, searchTerms, commentHandler);
         }
 
         public async ValueTask ReadCompressedDumpFile(string[] searchTerms)

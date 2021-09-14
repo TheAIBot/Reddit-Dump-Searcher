@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -53,7 +54,7 @@ namespace PushShift_Dump_Parser
             });
         }
 
-        public static async Task SplitFilesIntoSmallerCompressedFiles(string srcDir, string dstDir)
+        public static async Task SplitFilesIntoSmallerCompressedFiles(string srcDir, string dstDir, bool fromCompressed = true)
         {
             Directory.CreateDirectory(dstDir);
             ActionBlock<string> actionExecutor = new ActionBlock<string>(async srcFileName =>
@@ -65,7 +66,14 @@ namespace PushShift_Dump_Parser
                 var commentSearcher = new PushShiftDumpReader(srcFileName);
                 using var commentSplitter = new CommentsIntoChunks(baseDstFileName, fileExtension, maxFileSize);
 
-                await commentSearcher.ReadCompressedDumpFile(Array.Empty<string>(), commentSplitter.HandleComment);
+                if (fromCompressed)
+                {
+                    await commentSearcher.ReadCompressedDumpFile(Array.Empty<string>(), commentSplitter.HandleComment);   
+                }
+                else
+                {
+                    await commentSearcher.ReadUncompressedDumpFile(Array.Empty<string>(), commentSplitter.HandleComment);   
+                }
             },
             new ExecutionDataflowBlockOptions()
             {
