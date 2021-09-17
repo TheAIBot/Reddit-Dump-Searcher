@@ -23,28 +23,28 @@ namespace PushShift_Dump_Parser
         {
             using var cmd = new SQLiteCommand(connection);
             CreateTable(cmd, 
-            @"CREATE TABLE users(
-                id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                name TEXT
+            @"CREATE TABLE User(
+                UserID INTEGER PRIMARY KEY AUTOINCREMENT, 
+                Name TEXT
             )");
-            CreateTable(cmd, 
-            @"CREATE TABLE submissions(
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sub_id TEXT,
-                title TEXT,
-                userID INTEGER,
-                FOREIGN KEY(userID) REFERENCES users(id)
+            CreateTable(cmd,
+            @"CREATE TABLE Submission(
+                SubmissionID INTEGER PRIMARY KEY AUTOINCREMENT,
+                RedditSubmissionID TEXT,
+                Title TEXT,
+                UserID INTEGER,
+                FOREIGN KEY(UserID) REFERENCES User(UserID)
             )");
-            CreateTable(cmd, 
-            @"CREATE TABLE comments(
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                com_id TEXT,
-                content TEXT,
-                userID INTEGER,
-                submissionID INTEGER,
-                parentCommentID INTEGER,
-                FOREIGN KEY(userID) REFERENCES users(id)
-                FOREIGN KEY(submissionID) REFERENCES submissions(id)
+            CreateTable(cmd,
+            @"CREATE TABLE Comment(
+                CommentID INTEGER PRIMARY KEY AUTOINCREMENT,
+                RedditCommentID TEXT,
+                Content TEXT,
+                UserID INTEGER,
+                SubmissionID INTEGER,
+                ParentRedditCommentID INTEGER,
+                FOREIGN KEY(UserID) REFERENCES User(UserID)
+                FOREIGN KEY(SubmissionID) REFERENCES Submission(SubmissionID)
             )");
             Console.WriteLine("Created all tables.");
         }
