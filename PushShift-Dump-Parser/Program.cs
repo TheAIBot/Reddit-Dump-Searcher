@@ -1,14 +1,15 @@
 ﻿using PushShift_Dump_Parser;
-using System.Diagnostics;
 using System.IO;
-string dumpsDir = @"...";
-string chunksDir = @"...";
 
-string[] searchTerms = new string[] { "..." };
 
-//await ParallelDumpReader.SearchFiles(Directory.GetFiles(dumpsDir), searchTerms);
-//await ParallelDumpReader.SearchFiles(Directory.GetFiles(chunksDir), searchTerms);
 
-await ZSTDHelper.SplitFilesIntoSmallerCompressedFiles(dumpsDir, chunksDir);
+//await ParallelDumpReader.SearchFiles(Directory.GetFiles(dumpsDir), searchTerms, new ZstdCompressor());
+//await ParallelDumpReader.SearchFiles(Directory.GetFiles(chunksDir), searchTerms, new ZstdCompressor());
+
+//await ZSTDHelper.SplitFilesIntoSmallerCompressedFiles(dumpsDir, chunksDir);
+
+CompressorHelper.CompressFolder(dumpsDir, new ZstdCompressor(), new Lz4Compressor());
+
+//using var db = new RedditContext();
 
 

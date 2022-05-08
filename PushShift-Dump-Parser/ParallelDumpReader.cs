@@ -1,13 +1,18 @@
-﻿using System.Threading.Tasks.Dataflow;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 
 namespace PushShift_Dump_Parser
 {
     internal static class ParallelDumpReader
     {
-        public static async Task SearchFiles(string[] files, string[] searchTerms)
+        public static async Task SearchFiles(string[] files, string[] searchTerms, ICompressor compressor)
         {
             PushShiftDumpReader[] readers = files.Select(x => new PushShiftDumpReader(x)).ToArray();
-            ActionBlock<PushShiftDumpReader> actionExecutor = new ActionBlock<PushShiftDumpReader>(x => x.ReadCompressedDumpFile(searchTerms),
+            ActionBlock<PushShiftDumpReader> actionExecutor = new ActionBlock<PushShiftDumpReader>(async x => await x.ReadDumpFile(searchTerms, compressor).ConfigureAwait(false),
                 new ExecutionDataflowBlockOptions()
                 {
                     MaxDegreeOfParallelism = Environment.ProcessorCount - 1,
