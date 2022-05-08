@@ -1,15 +1,11 @@
 ﻿using K4os.Compression.LZ4.Streams;
 using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using ZstdNet;
+using K4os.Compression.LZ4;
 
 namespace PushShift_Dump_Parser
 {
@@ -61,7 +57,7 @@ namespace PushShift_Dump_Parser
             {
                 string baseDstFileName = Path.Combine(dstDir, Path.GetFileNameWithoutExtension(srcFileName));
                 string fileExtension = Path.GetExtension(srcFileName);
-                long maxFileSize = 1024 * 1024 * 1024 * 6L;
+                long maxFileSize = 1024 * 1024 * 1024 * 1L;
 
                 var commentSearcher = new PushShiftDumpReader(srcFileName);
                 using var commentSplitter = new CommentsIntoChunks(baseDstFileName, fileExtension, maxFileSize, dstCompression);
@@ -333,7 +329,7 @@ internal sealed class Lz4Compressor : ICompressor
 
     public Lz4Compressor(LZ4EncoderSettings? compressionOptions, LZ4DecoderSettings? decompressionOptions)
     {
-        _compressionOptions = compressionOptions;
+        _compressionOptions = compressionOptions ?? new LZ4EncoderSettings() {CompressionLevel = LZ4Level.L04_HC};
         _decompressionOptions = decompressionOptions;
     }
 
