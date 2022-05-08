@@ -12,7 +12,18 @@ namespace PushShift_Dump_Parser
         public static async Task SearchFiles(string[] files, string[] searchTerms, ICompressor compressor)
         {
             PushShiftDumpReader[] readers = files.Select(x => new PushShiftDumpReader(x)).ToArray();
-            ActionBlock<PushShiftDumpReader> actionExecutor = new ActionBlock<PushShiftDumpReader>(async x => await x.ReadDumpFile(searchTerms, compressor).ConfigureAwait(false),
+            ActionBlock<PushShiftDumpReader> actionExecutor = new ActionBlock<PushShiftDumpReader>(async x => 
+                {
+                    try
+                    {
+                        await x.ReadDumpFile(searchTerms, compressor).ConfigureAwait(false);
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e);
+                        throw;
+                    }
+                },
                 new ExecutionDataflowBlockOptions()
                 {
                     MaxDegreeOfParallelism = Environment.ProcessorCount - 1,

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -26,12 +26,20 @@ namespace PushShift_Dump_Parser
             return ReadDumpFile(searchTerms, srcCompression, IncrementStats);
         }
 
-        public ValueTask ReadDumpFile(string[] searchTerms, ICompressor srcCompression, Func<ReadOnlyMemory<byte>, bool, ValueTask> commentHandler)
+        public async ValueTask ReadDumpFile(string[] searchTerms, ICompressor srcCompression, Func<ReadOnlyMemory<byte>, bool, ValueTask> commentHandler)
         {
-            using var fileStream = File.OpenRead(FilePath);
-            using var wafa = srcCompression.Decompress(fileStream);
+            try
+            {
+                using var fileStream = File.OpenRead(FilePath);
+                using var wafa = srcCompression.Decompress(fileStream);
 
-            return ReadDumpFile(wafa, searchTerms, commentHandler);
+                await ReadDumpFile(wafa, searchTerms, commentHandler);
+            }
+            catch (Exception)
+            {
+                IsDoneSearching = true;
+                throw;
+            }
         }
 
         private async ValueTask ReadDumpFile(Stream binaryFile, string[] searchTerms, Func<ReadOnlyMemory<byte>, bool, ValueTask> commentHandler)
