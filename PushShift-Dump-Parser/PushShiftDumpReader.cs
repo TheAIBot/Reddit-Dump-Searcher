@@ -21,28 +21,17 @@ namespace PushShift_Dump_Parser
             this.FilePath = filePath;
         }
 
-        public async ValueTask ReadUncompressedDumpFile(string[] searchTerms)
+        public ValueTask ReadDumpFile(string[] searchTerms, ICompressor srcCompression)
         {
-            await ReadUncompressedDumpFile(searchTerms, IncrementStats);
+            return ReadDumpFile(searchTerms, srcCompression, IncrementStats);
         }
 
-        public async ValueTask ReadUncompressedDumpFile(string[] searchTerms, Func<ReadOnlyMemory<byte>, bool, ValueTask> commentHandler)
+        public ValueTask ReadDumpFile(string[] searchTerms, ICompressor srcCompression, Func<ReadOnlyMemory<byte>, bool, ValueTask> commentHandler)
         {
             using var fileStream = File.OpenRead(FilePath);
-            await ReadDumpFile(fileStream, searchTerms, commentHandler);
-        }
+            using var wafa = srcCompression.Decompress(fileStream);
 
-        public async ValueTask ReadCompressedDumpFile(string[] searchTerms)
-        {
-            await ReadCompressedDumpFile(searchTerms, IncrementStats);
-        }
-
-        public async ValueTask ReadCompressedDumpFile(string[] searchTerms, Func<ReadOnlyMemory<byte>, bool, ValueTask> commentHandler)
-        {
-            using var fileStream = File.OpenRead(FilePath);
-            using var wafa = new DecompressionStream(fileStream);
-
-            await ReadDumpFile(wafa, searchTerms, commentHandler);
+            return ReadDumpFile(wafa, searchTerms, commentHandler);
         }
 
         private async ValueTask ReadDumpFile(Stream binaryFile, string[] searchTerms, Func<ReadOnlyMemory<byte>, bool, ValueTask> commentHandler)
@@ -77,13 +66,14 @@ namespace PushShift_Dump_Parser
             IsDoneSearching = true;
         }
 
-        private async ValueTask IncrementStats(ReadOnlyMemory<byte> commentJSon, bool foundAllTerms)
+        private ValueTask IncrementStats(ReadOnlyMemory<byte> commentJSon, bool foundAllTerms)
         {
             if (foundAllTerms)
             {
                 LinesWithTerms++;
             }
             LinesSearched++;
+            return ValueTask.CompletedTask;
         }
 
         private bool TryGetNextLine(Stream stream, ref byte[] buffer, ref ReadOnlyMemory<byte> bufferRemaining, out ReadOnlyMemory<byte> commentJSon)

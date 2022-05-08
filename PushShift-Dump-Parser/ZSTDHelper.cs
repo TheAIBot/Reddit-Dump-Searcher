@@ -1,4 +1,5 @@
-﻿using System;
+﻿using K4os.Compression.LZ4.Streams;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -12,39 +13,38 @@ using ZstdNet;
 
 namespace PushShift_Dump_Parser
 {
-    internal static class ZSTDHelper
+    internal static class CompressorHelper
     {
-        public static void CompressFolder(string folderPath)
+        public static void CompressFolder(string folderPath, ICompressor currentCompression, ICompressor compressTo)
         {
             Parallel.ForEach(Directory.GetFiles(folderPath), fileName =>
             {
-                if (fileName.Contains(".zstd"))
+                if (fileName.Contains(compressTo.GetFileExtension()))
                 {
                     return;
                 }
 
-                if (File.Exists(fileName + ".zstd"))
+                if (File.Exists(fileName + compressTo.GetFileExtension()))
                 {
                     return;
                 }
 
                 Console.WriteLine($"Starting to compress: {fileName}");
-                CompressDump(fileName, fileName + ".zstd");
+                CompressDump(fileName, fileName + compressTo.GetFileExtension(), currentCompression, compressTo);
                 Console.WriteLine($"Finished to compressing: {fileName}");
             });
         }
 
-        public static void ChangeCompressionLevel(string folderPath, int newCompressionLevel)
+        public static void ChangeCompressionLevel(string folderPath, ICompressor from, ICompressor to)
         {
             Parallel.ForEach(Directory.GetFiles(folderPath), fileName =>
             {
                 string dstFileName = fileName + "-temp";
 
-                using (var compressionOptions = new CompressionOptions(newCompressionLevel))
                 using (var srcFile = File.OpenRead(fileName))
-                using (var decompressor = new DecompressionStream(srcFile))
+                using (var decompressor = from.Decompress(srcFile))
                 using (var dstFile = File.OpenWrite(dstFileName))
-                using (var compressor = new CompressionStream(dstFile, compressionOptions))
+                using (var compressor = to.Compress(dstFile))
                 {
                     decompressor.CopyTo(compressor);
                 }
@@ -54,7 +54,7 @@ namespace PushShift_Dump_Parser
             });
         }
 
-        public static async Task SplitFilesIntoSmallerCompressedFiles(string srcDir, string dstDir, bool fromCompressed = true)
+        public static async Task SplitFilesIntoSmallerCompressedFiles(string srcDir, string dstDir, ICompressor srcCompression, ICompressor dstCompression)
         {
             Directory.CreateDirectory(dstDir);
             ActionBlock<string> actionExecutor = new ActionBlock<string>(async srcFileName =>
@@ -64,16 +64,9 @@ namespace PushShift_Dump_Parser
                 long maxFileSize = 1024 * 1024 * 1024 * 6L;
 
                 var commentSearcher = new PushShiftDumpReader(srcFileName);
-                using var commentSplitter = new CommentsIntoChunks(baseDstFileName, fileExtension, maxFileSize);
+                using var commentSplitter = new CommentsIntoChunks(baseDstFileName, fileExtension, maxFileSize, dstCompression);
 
-                if (fromCompressed)
-                {
-                    await commentSearcher.ReadCompressedDumpFile(Array.Empty<string>(), commentSplitter.HandleComment);   
-                }
-                else
-                {
-                    await commentSearcher.ReadUncompressedDumpFile(Array.Empty<string>(), commentSplitter.HandleComment);   
-                }
+                await commentSearcher.ReadDumpFile(Array.Empty<string>(), srcCompression, commentSplitter.HandleComment);
             },
             new ExecutionDataflowBlockOptions()
             {
@@ -89,12 +82,13 @@ namespace PushShift_Dump_Parser
             await actionExecutor.Completion;
         }
 
-        public static void CompressDump(string dumpPath, string compressedDumpPath)
+        public static void CompressDump(string dumpPath, string compressedDumpPath, ICompressor currentCompression, ICompressor compressTo)
         {
             using var compressedSrc = File.OpenRead(dumpPath);
+            using var uncompressedSrc = currentCompression.Decompress(compressedSrc);
             using var compressedDst = File.OpenWrite(compressedDumpPath);
-            using var compressor = new CompressionStream(compressedDst);
-            compressedSrc.CopyTo(compressor);
+            using var compressorStream = compressTo.Compress(compressedDst);
+            uncompressedSrc.CopyTo(compressorStream);
         }
     }
 
@@ -106,17 +100,19 @@ namespace PushShift_Dump_Parser
         private readonly Task CompressionTask;
         private readonly ChannelReader<byte[]> BufferPool;
         private readonly ChannelWriter<WriterCommand> CompressorCmds;
+        private readonly ICompressor _compressor;
         private const int BufferCount = 5;
         private const int BufferSize = 1024 * 1024 * 100;
         private int FileCount = 0;
         private long WrittenBytes = 0;
         private CommentBuffer CompressionBuffer;
 
-        public CommentsIntoChunks(string baseFilePath, string fileExtension, long maxBytesPerFile)
+        public CommentsIntoChunks(string baseFilePath, string fileExtension, long maxBytesPerFile, ICompressor compressor)
         {
             this.BaseFilePath = baseFilePath;
             this.FileExtension = fileExtension;
             this.MaxBytesPerFile = maxBytesPerFile;
+            _compressor = compressor;
 
 
             Channel<byte[]> bufferPoolChannel = Channel.CreateBounded<byte[]>(BufferCount);
@@ -166,13 +162,13 @@ namespace PushShift_Dump_Parser
             WrittenBytes += commentJSon.Length + 1;
         }
 
-        private static async ValueTask CompressBuffers(ChannelReader<WriterCommand> cmdReader, ChannelWriter<byte[]> arrayPool)
+        private async ValueTask CompressBuffers(ChannelReader<WriterCommand> cmdReader, ChannelWriter<byte[]> arrayPool)
         {
             var data = await cmdReader.ReadAsync();
             while (true)
             {
                 using var fileStream = File.OpenWrite(data.FileName);
-                using var compressionStream = new CompressionStream(fileStream);
+                using var compressionStream = _compressor.Compress(fileStream);
 
                 while (true)
                 {
@@ -253,5 +249,106 @@ namespace PushShift_Dump_Parser
                 await arrayPool.WriteAsync(Arr);
             }
         }
+    }
+}
+
+internal interface ICompressor
+{
+    Stream Compress(Stream stream);
+
+    Stream Decompress(Stream stream);
+    string GetFileExtension();
+}
+
+internal class NoCompression : ICompressor
+{
+    public Stream Compress(Stream stream)
+    {
+        return stream;
+    }
+
+    public Stream Decompress(Stream stream)
+    {
+        return stream;
+    }
+
+    public string GetFileExtension()
+    {
+        throw new NotImplementedException();
+    }
+}
+
+internal sealed class ZstdCompressor : ICompressor
+{
+    private readonly CompressionOptions _compressionOptions;
+    private readonly DecompressionOptions _decompressionOptions;
+
+    public ZstdCompressor() : this(CompressionOptions.Default, new DecompressionOptions())
+    {
+    }
+
+    public ZstdCompressor(CompressionOptions options) : this(options, new DecompressionOptions())
+    {
+    }
+
+    public ZstdCompressor(DecompressionOptions options) : this(CompressionOptions.Default, options)
+    {
+    }
+
+    public ZstdCompressor(CompressionOptions compressionOptions, DecompressionOptions decompressionOptions)
+    {
+        _compressionOptions = compressionOptions;
+        _decompressionOptions = decompressionOptions;
+    }
+
+    public Stream Compress(Stream stream)
+    {
+        return new CompressionStream(stream, _compressionOptions);
+    }
+
+    public Stream Decompress(Stream stream)
+    {
+        return new DecompressionStream(stream, _decompressionOptions);
+    }
+
+    public string GetFileExtension() => ".zstd";
+}
+
+internal sealed class Lz4Compressor : ICompressor
+{
+    private readonly LZ4EncoderSettings? _compressionOptions;
+    private readonly LZ4DecoderSettings? _decompressionOptions;
+
+    public Lz4Compressor() : this(null, null)
+    {
+    }
+
+    public Lz4Compressor(LZ4EncoderSettings? options) : this(options, null)
+    {
+    }
+
+    public Lz4Compressor(LZ4DecoderSettings? options) : this(null, options)
+    {
+    }
+
+    public Lz4Compressor(LZ4EncoderSettings? compressionOptions, LZ4DecoderSettings? decompressionOptions)
+    {
+        _compressionOptions = compressionOptions;
+        _decompressionOptions = decompressionOptions;
+    }
+
+    public Stream Compress(Stream stream)
+    {
+        return LZ4Stream.Encode(stream, _compressionOptions);
+    }
+
+    public Stream Decompress(Stream stream)
+    {
+        return LZ4Stream.Decode(stream, _decompressionOptions);
+    }
+
+    public string GetFileExtension()
+    {
+        return ".lz4";
     }
 }
