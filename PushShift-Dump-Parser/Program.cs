@@ -1,7 +1,7 @@
 ﻿using PushShift_Dump_Parser;
 using System.IO;
 
-
+string dumpsDir = "";
 
 //await ParallelDumpReader.SearchFiles(Directory.GetFiles(dumpsDir), searchTerms, new ZstdCompressor());
 //await ParallelDumpReader.SearchFiles(Directory.GetFiles(chunksDir), searchTerms, new ZstdCompressor());
