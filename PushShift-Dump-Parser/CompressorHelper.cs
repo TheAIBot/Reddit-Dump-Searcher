@@ -1,11 +1,8 @@
-﻿using K4os.Compression.LZ4.Streams;
-using System;
+﻿using System;
 using System.IO;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
-using ZstdNet;
-using K4os.Compression.LZ4;
 
 namespace PushShift_Dump_Parser
 {
@@ -245,106 +242,5 @@ namespace PushShift_Dump_Parser
                 await arrayPool.WriteAsync(Arr);
             }
         }
-    }
-}
-
-internal interface ICompressor
-{
-    Stream Compress(Stream stream);
-
-    Stream Decompress(Stream stream);
-    string GetFileExtension();
-}
-
-internal class NoCompression : ICompressor
-{
-    public Stream Compress(Stream stream)
-    {
-        return stream;
-    }
-
-    public Stream Decompress(Stream stream)
-    {
-        return stream;
-    }
-
-    public string GetFileExtension()
-    {
-        throw new NotImplementedException();
-    }
-}
-
-internal sealed class ZstdCompressor : ICompressor
-{
-    private readonly CompressionOptions _compressionOptions;
-    private readonly DecompressionOptions _decompressionOptions;
-
-    public ZstdCompressor() : this(CompressionOptions.Default, new DecompressionOptions())
-    {
-    }
-
-    public ZstdCompressor(CompressionOptions options) : this(options, new DecompressionOptions())
-    {
-    }
-
-    public ZstdCompressor(DecompressionOptions options) : this(CompressionOptions.Default, options)
-    {
-    }
-
-    public ZstdCompressor(CompressionOptions compressionOptions, DecompressionOptions decompressionOptions)
-    {
-        _compressionOptions = compressionOptions;
-        _decompressionOptions = decompressionOptions;
-    }
-
-    public Stream Compress(Stream stream)
-    {
-        return new CompressionStream(stream, _compressionOptions);
-    }
-
-    public Stream Decompress(Stream stream)
-    {
-        return new DecompressionStream(stream, _decompressionOptions);
-    }
-
-    public string GetFileExtension() => ".zstd";
-}
-
-internal sealed class Lz4Compressor : ICompressor
-{
-    private readonly LZ4EncoderSettings? _compressionOptions;
-    private readonly LZ4DecoderSettings? _decompressionOptions;
-
-    public Lz4Compressor() : this(null, null)
-    {
-    }
-
-    public Lz4Compressor(LZ4EncoderSettings? options) : this(options, null)
-    {
-    }
-
-    public Lz4Compressor(LZ4DecoderSettings? options) : this(null, options)
-    {
-    }
-
-    public Lz4Compressor(LZ4EncoderSettings? compressionOptions, LZ4DecoderSettings? decompressionOptions)
-    {
-        _compressionOptions = compressionOptions ?? new LZ4EncoderSettings() {CompressionLevel = LZ4Level.L04_HC};
-        _decompressionOptions = decompressionOptions;
-    }
-
-    public Stream Compress(Stream stream)
-    {
-        return LZ4Stream.Encode(stream, _compressionOptions);
-    }
-
-    public Stream Decompress(Stream stream)
-    {
-        return LZ4Stream.Decode(stream, _decompressionOptions);
-    }
-
-    public string GetFileExtension()
-    {
-        return ".lz4";
     }
 }
