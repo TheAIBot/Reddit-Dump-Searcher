@@ -47,14 +47,19 @@ namespace PushShift_Dump_Parser
             });
         }
 
-        public static async Task SplitFilesIntoSmallerCompressedFiles(string srcDir, string dstDir, ICompressor srcCompression, ICompressor dstCompression)
+        public static Task SplitFilesIntoSmallerCompressedFiles(string srcDir, string dstDir, ICompressor srcCompression, ICompressor dstCompression)
+        {
+            return SplitFilesIntoSmallerCompressedFiles(Directory.GetFiles(srcDir), dstDir, srcCompression, dstCompression);
+        }
+
+        public static async Task SplitFilesIntoSmallerCompressedFiles(string[] srcFiles, string dstDir, ICompressor srcCompression, ICompressor dstCompression)
         {
             Directory.CreateDirectory(dstDir);
             ActionBlock<string> actionExecutor = new ActionBlock<string>(async srcFileName =>
             {
                 string baseDstFileName = Path.Combine(dstDir, Path.GetFileNameWithoutExtension(srcFileName));
                 string fileExtension = Path.GetExtension(srcFileName);
-                long maxFileSize = 1024 * 1024 * 1024 * 1L;
+                long maxFileSize = 1024 * 1024 * 1024 * 6L;
 
                 var commentSearcher = new PushShiftDumpReader(srcFileName);
                 using var commentSplitter = new CommentsIntoChunks(baseDstFileName, fileExtension, maxFileSize, dstCompression);
@@ -67,7 +72,7 @@ namespace PushShift_Dump_Parser
                 MaxMessagesPerTask = 1
             });
 
-            foreach (var file in Directory.GetFiles(srcDir))
+            foreach (var file in srcFiles)
             {
                 actionExecutor.Post(file);
             }
