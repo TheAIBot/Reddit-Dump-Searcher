@@ -39,7 +39,9 @@ namespace PushShift_Dump_Parser
                 using (var dstFile = File.OpenWrite(dstFileName))
                 using (var compressor = to.Compress(dstFile))
                 {
+                    Console.WriteLine($"Starting to change compression for: {fileName}");
                     decompressor.CopyTo(compressor);
+                    Console.WriteLine($"Finished changing compression for: {fileName}");
                 }
 
                 File.Delete(fileName);
