@@ -2,10 +2,12 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
 	<Platform>x64</Platform>
     <RootNamespace>PushShift_Dump_Parser</RootNamespace>
     <Nullable>enable</Nullable>
+	<ServerGarbageCollection>true</ServerGarbageCollection>
+	<GarbageCollectionAdaptationMode>1</GarbageCollectionAdaptationMode>
   </PropertyGroup>
 
   <ItemGroup>
